@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GameVault -- On-Chain Item Market</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --bg:      #0a0c10;
+    --panel:   #0f1318;
+    --border:  #1e2530;
+    --accent:  #00e5ff;
+    --accent2: #ff6b35;
+    --gold:    #ffc107;
+    --text:    #c8d6e5;
+    --dim:     #5a6a7e;
+    --rare:    #a855f7;
+    --legend:  #f59e0b;
+    --common:  #64748b;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 16px;
+    min-height: 100vh;
+    background-image:
+      radial-gradient(ellipse 80% 40% at 50% -10%, rgba(0,229,255,.07) 0%, transparent 60%),
+      repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(0,229,255,.03) 40px),
+      repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(0,229,255,.03) 40px);
+  }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 14px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(15,19,24,.9);
+    backdrop-filter: blur(8px);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: .12em;
+    color: var(--accent);
+    text-shadow: 0 0 18px rgba(0,229,255,.5);
+  }
+  .logo span { color: var(--accent2); }
+
+  #walletBtn {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: .8rem;
+    padding: 7px 16px;
+    border: 1px solid var(--accent);
+    background: transparent;
+    color: var(--accent);
+    cursor: pointer;
+    letter-spacing: .08em;
+    transition: all .2s;
+    clip-path: polygon(8px 0%, 100% 0%, calc(100% - 8px) 100%, 0% 100%);
+  }
+  #walletBtn:hover { background: rgba(0,229,255,.12); box-shadow: 0 0 14px rgba(0,229,255,.3); }
+  #walletBtn.connected { border-color: #22c55e; color: #22c55e; }
+
+  .notice {
+    margin: 18px 28px 0;
+    padding: 10px 16px;
+    border-left: 3px solid var(--accent2);
+    background: rgba(255,107,53,.07);
+    font-size: .85rem;
+    color: #ffa07a;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  main { padding: 24px 28px 60px; max-width: 1200px; margin: 0 auto; }
+
+  h2 {
+    font-size: 1rem;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 16px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ---- MINT PANEL ---- */
+  .mint-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 20px;
+    margin-bottom: 32px;
+  }
+
+  .form-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+
+  .form-row input, .form-row select {
+    flex: 1;
+    min-width: 140px;
+    background: #080b0f;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 9px 12px;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: .95rem;
+    outline: none;
+    transition: border-color .2s;
+  }
+  .form-row input:focus, .form-row select:focus { border-color: var(--accent); }
+
+  .btn {
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 700;
+    font-size: .95rem;
+    letter-spacing: .1em;
+    padding: 9px 22px;
+    border: none;
+    cursor: pointer;
+    transition: all .2s;
+    text-transform: uppercase;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #000;
+    clip-path: polygon(6px 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%);
+  }
+  .btn-primary:hover { box-shadow: 0 0 18px rgba(0,229,255,.4); }
+  .btn-sell {
+    background: var(--accent2);
+    color: #fff;
+    font-size: .8rem;
+    padding: 5px 12px;
+    clip-path: polygon(4px 0%, 100% 0%, calc(100% - 4px) 100%, 0% 100%);
+  }
+  .btn-buy {
+    background: #22c55e;
+    color: #000;
+    font-size: .8rem;
+    padding: 5px 12px;
+    clip-path: polygon(4px 0%, 100% 0%, calc(100% - 4px) 100%, 0% 100%);
+  }
+  .btn-delist {
+    background: #ef4444;
+    color: #fff;
+    font-size: .8rem;
+    padding: 5px 12px;
+    clip-path: polygon(4px 0%, 100% 0%, calc(100% - 4px) 100%, 0% 100%);
+  }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* ---- ITEM GRID ---- */
+  #itemGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+  }
+
+  .item-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 16px;
+    position: relative;
+    transition: border-color .2s, transform .15s;
+    animation: fadeIn .3s ease forwards;
+  }
+  .item-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  .item-id {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: .7rem;
+    color: var(--dim);
+    margin-bottom: 6px;
+  }
+
+  .item-name {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 2px;
+  }
+
+  .item-type { font-size: .85rem; color: var(--dim); margin-bottom: 8px; }
+
+  .rarity-badge {
+    display: inline-block;
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .12em;
+    padding: 2px 8px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .r-Common   { background: rgba(100,116,139,.2); color: var(--common);  border: 1px solid var(--common); }
+  .r-Rare     { background: rgba(168,85,247,.15); color: var(--rare);    border: 1px solid var(--rare); }
+  .r-Legendary{ background: rgba(245,158,11,.15); color: var(--legend);  border: 1px solid var(--legend); }
+
+  .item-owner {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: .68rem;
+    color: var(--dim);
+    margin-bottom: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .item-price {
+    font-size: .9rem;
+    color: var(--gold);
+    margin-bottom: 10px;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  .item-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+  .price-input {
+    background: #080b0f;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 4px 8px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: .75rem;
+    width: 90px;
+    outline: none;
+  }
+
+  #status {
+    position: fixed;
+    bottom: 20px;
+    right: 24px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    padding: 10px 16px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: .78rem;
+    max-width: 340px;
+    opacity: 0;
+    transition: opacity .3s;
+    z-index: 200;
+  }
+  #status.visible { opacity: 1; }
+  #status.err { border-left-color: #ef4444; color: #fca5a5; }
+  #status.ok  { border-left-color: #22c55e; color: #86efac; }
+
+  .seed-note {
+    font-size: .8rem;
+    color: var(--dim);
+    font-family: 'Share Tech Mono', monospace;
+    margin-bottom: 16px;
+  }
+
+  #contractAddr {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: .75rem;
+    color: var(--dim);
+    margin-top: 6px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">GAME<span>VAULT</span></div>
+  <button id="walletBtn" onclick="connectWallet()">[ CONNECT WALLET ]</button>
+</header>
+
+<div class="notice">
+  SCOPE NOTICE: This prototype demonstrates on-chain item ownership and peer-to-peer trading.
+  Integration with game backends (inventory sync, in-game item activation) is outside the scope
+  of this laboratory work and would require a separate oracle/bridge layer.
+</div>
+
+<main>
+  <div id="contractAddr">Contract: not deployed yet -- paste address below after deploying via Remix</div>
+
+  <br>
+
+  <!-- Contract address input for after Remix deploy -->
+  <div class="form-row" style="margin-bottom:24px">
+    <input id="contractInput" placeholder="Paste deployed contract address (0x...)" style="flex:2">
+    <button class="btn btn-primary" onclick="setContract()">LOAD CONTRACT</button>
+  </div>
+
+  <!-- MINT -->
+  <h2>Mint New Item</h2>
+  <p class="seed-note">// For demo: use the "Seed Test Items" button to mint 4 preset items at once</p>
+  <div class="mint-panel">
+    <div class="form-row">
+      <input id="mintName" placeholder="Item name (e.g. Frostblade)" />
+      <select id="mintType">
+        <option>Sword</option>
+        <option>Armor</option>
+        <option>Mount</option>
+        <option>Staff</option>
+        <option>Shield</option>
+        <option>Bow</option>
+      </select>
+      <select id="mintRarity">
+        <option>Common</option>
+        <option>Rare</option>
+        <option>Legendary</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-primary" onclick="mintItem()">MINT ITEM</button>
+      <button class="btn btn-primary" style="background:#1e2530;color:var(--accent)" onclick="seedItems()">SEED TEST ITEMS (x4)</button>
+    </div>
+  </div>
+
+  <!-- MARKET -->
+  <h2>Market / Inventory</h2>
+  <div style="margin-bottom:16px">
+    <button class="btn btn-primary" style="font-size:.8rem;padding:6px 14px" onclick="loadItems()">REFRESH ITEMS</button>
+  </div>
+  <div id="itemGrid"><p style="color:var(--dim);font-family:'Share Tech Mono',monospace;font-size:.85rem">// Connect wallet and load contract to see items</p></div>
+</main>
+
+<div id="status"></div>
+
+<script>
+// ---------------------------------------------------------------
+// ABI -- only the functions we need
+// ---------------------------------------------------------------
+const ABI = [
+  "function mintItem(string name, string itemType, string rarity) returns (uint256)",
+  "function listItem(uint256 id, uint256 price)",
+  "function buyItem(uint256 id) payable",
+  "function delistItem(uint256 id)",
+  "function getItem(uint256 id) view returns (tuple(uint256 id,string name,string itemType,string rarity,address owner,uint256 price,bool forSale))",
+  "function totalItems() view returns (uint256)",
+  "event ItemMinted(uint256 indexed id, string name, address indexed owner)",
+  "event ItemSold(uint256 indexed id, address indexed from, address indexed to, uint256 price)"
+];
+
+// ---------------------------------------------------------------
+// Preset test items for seed
+// ---------------------------------------------------------------
+const SEED_ITEMS = [
+  { name: "Frostblade",       type: "Sword",  rarity: "Legendary" },
+  { name: "Shadowweave Cloak", type: "Armor",  rarity: "Rare"      },
+  { name: "Phoenix Mount",    type: "Mount",  rarity: "Legendary" },
+  { name: "Iron Buckler",     type: "Shield", rarity: "Common"    }
+];
+
+let provider, signer, contract, userAddr;
+
+// ---------------------------------------------------------------
+// Wallet
+// ---------------------------------------------------------------
+async function connectWallet() {
+  if (!window.ethereum) { showStatus("MetaMask not found.", "err"); return; }
+  try {
+    // Force switch to Sepolia
+    await window.ethereum.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: "0xaa36a7" }]  // 11155111 = Sepolia
+    });
+    provider = new ethers.BrowserProvider(window.ethereum);
+    signer   = await provider.getSigner();
+    userAddr = await signer.getAddress();
+    const btn = document.getElementById("walletBtn");
+    btn.textContent = userAddr.slice(0,6) + "..." + userAddr.slice(-4);
+    btn.classList.add("connected");
+    showStatus("Wallet connected: " + userAddr, "ok");
+    if (contract) loadItems();
+	window.ethereum.on("accountsChanged", async (accounts) => {
+	userAddr = accounts[0];
+	signer = await provider.getSigner();
+	const btn = document.getElementById("walletBtn");
+	btn.textContent = userAddr.slice(0,6) + "..." + userAddr.slice(-4);
+	if (contract) loadItems();
+	});
+  } catch(e) { showStatus(e.message, "err"); }
+}
+
+// ---------------------------------------------------------------
+// Load contract by address
+// ---------------------------------------------------------------
+function setContract() {
+  const addr = document.getElementById("contractInput").value.trim();
+  if (!ethers.isAddress(addr)) { showStatus("Invalid address", "err"); return; }
+  if (!signer) { showStatus("Connect wallet first", "err"); return; }
+  contract = new ethers.Contract(addr, ABI, signer);
+  document.getElementById("contractAddr").textContent = "Contract: " + addr;
+  showStatus("Contract loaded", "ok");
+  loadItems();
+}
+
+// ---------------------------------------------------------------
+// Mint single item
+// ---------------------------------------------------------------
+async function mintItem() {
+  if (!contract) { showStatus("Load contract first", "err"); return; }
+  const name   = document.getElementById("mintName").value.trim();
+  const type_  = document.getElementById("mintType").value;
+  const rarity = document.getElementById("mintRarity").value;
+  if (!name) { showStatus("Enter item name", "err"); return; }
+  try {
+    showStatus("Minting...", "");
+    const tx = await contract.mintItem(name, type_, rarity);
+    await tx.wait();
+    showStatus("Minted: " + name, "ok");
+    loadItems();
+  } catch(e) { showStatus(e.reason || e.message, "err"); }
+}
+
+// ---------------------------------------------------------------
+// Seed 4 test items
+// ---------------------------------------------------------------
+async function seedItems() {
+  if (!contract) { showStatus("Load contract first", "err"); return; }
+  showStatus("Seeding test items...", "");
+  for (const item of SEED_ITEMS) {
+    try {
+      const tx = await contract.mintItem(item.name, item.type, item.rarity);
+      await tx.wait();
+    } catch(e) { showStatus("Seed error: " + (e.reason || e.message), "err"); return; }
+  }
+  showStatus("4 test items minted!", "ok");
+  loadItems();
+}
+
+// ---------------------------------------------------------------
+// Load and render all items
+// ---------------------------------------------------------------
+async function loadItems() {
+  if (!contract) return;
+  const grid = document.getElementById("itemGrid");
+  grid.innerHTML = '<p style="color:var(--dim);font-family:\'Share Tech Mono\',monospace;font-size:.85rem">// Loading...</p>';
+  try {
+    const total = Number(await contract.totalItems());
+    if (total === 0) { grid.innerHTML = '<p style="color:var(--dim);font-family:\'Share Tech Mono\',monospace">// No items yet. Mint some!</p>'; return; }
+    const items = [];
+    for (let i = 1; i <= total; i++) {
+      try { items.push(await contract.getItem(i)); } catch(_) {}
+    }
+    grid.innerHTML = "";
+    for (const item of items) renderCard(item, grid);
+  } catch(e) { showStatus(e.message, "err"); }
+}
+
+function renderCard(item, grid) {
+  const isOwner = userAddr && item.owner.toLowerCase() === userAddr.toLowerCase();
+  const priceEth = item.forSale ? ethers.formatEther(item.price) + " ETH" : "";
+
+  const card = document.createElement("div");
+  card.className = "item-card";
+  card.innerHTML = `
+    <div class="item-id">ID #${item.id}</div>
+    <div class="item-name">${esc(item.name)}</div>
+    <div class="item-type">${esc(item.itemType)}</div>
+    <span class="rarity-badge r-${esc(item.rarity)}">${esc(item.rarity)}</span>
+    <div class="item-owner">Owner: ${item.owner.slice(0,8)}...${item.owner.slice(-4)}</div>
+    ${item.forSale ? `<div class="item-price">${priceEth}</div>` : ""}
+    <div class="item-actions" id="actions-${item.id}"></div>
+  `;
+  grid.appendChild(card);
+
+  const actions = card.querySelector("#actions-" + item.id);
+
+  if (isOwner && !item.forSale) {
+    // Owner: can list
+    const priceInp = document.createElement("input");
+    priceInp.className = "price-input";
+    priceInp.placeholder = "Price (ETH)";
+    priceInp.id = "price-" + item.id;
+    const sellBtn = document.createElement("button");
+    sellBtn.className = "btn btn-sell";
+    sellBtn.textContent = "LIST";
+    sellBtn.onclick = () => listItem(item.id);
+    actions.appendChild(priceInp);
+    actions.appendChild(sellBtn);
+  } else if (isOwner && item.forSale) {
+    // Owner: can delist
+    const delistBtn = document.createElement("button");
+    delistBtn.className = "btn btn-delist";
+    delistBtn.textContent = "DELIST";
+    delistBtn.onclick = () => delistItem(item.id);
+    actions.appendChild(delistBtn);
+  } else if (!isOwner && item.forSale) {
+    // Other user: can buy
+    const buyBtn = document.createElement("button");
+    buyBtn.className = "btn btn-buy";
+    buyBtn.textContent = "BUY";
+    buyBtn.onclick = () => buyItem(item.id, item.price);
+    actions.appendChild(buyBtn);
+  }
+}
+
+// ---------------------------------------------------------------
+// List / buy / delist
+// ---------------------------------------------------------------
+async function listItem(id) {
+  const val = document.getElementById("price-" + id).value.trim();
+  if (!val || isNaN(val) || Number(val) <= 0) { showStatus("Enter valid price", "err"); return; }
+  try {
+    showStatus("Listing item #" + id + "...", "");
+    const tx = await contract.listItem(id, ethers.parseEther(val));
+    await tx.wait();
+    showStatus("Item #" + id + " listed for " + val + " ETH", "ok");
+    loadItems();
+  } catch(e) { showStatus(e.reason || e.message, "err"); }
+}
+
+async function buyItem(id, price) {
+  try {
+    showStatus("Buying item #" + id + "...", "");
+    const tx = await contract.buyItem(id, { value: price });
+    await tx.wait();
+    showStatus("Item #" + id + " purchased!", "ok");
+    loadItems();
+  } catch(e) { showStatus(e.reason || e.message, "err"); }
+}
+
+async function delistItem(id) {
+  try {
+    showStatus("Delisting #" + id + "...", "");
+    const tx = await contract.delistItem(id);
+    await tx.wait();
+    showStatus("Item #" + id + " delisted", "ok");
+    loadItems();
+  } catch(e) { showStatus(e.reason || e.message, "err"); }
+}
+
+// ---------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------
+function esc(s) { return String(s).replace(/[<>&"]/g, c => ({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"}[c])); }
+
+let statusTimer;
+function showStatus(msg, type) {
+  const el = document.getElementById("status");
+  el.textContent = msg;
+  el.className = "visible " + (type || "");
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(() => el.classList.remove("visible"), 4000);
+}
+</script>
+</body>
+</html>
