@@ -1,0 +1,12 @@
+FROM litecoinproject/litecoin-core:0.21-alpine
+
+EXPOSE 19443 19444
+
+CMD [ \
+  "-printtoconsole", \
+  "-regtest=1", \
+  "-rpcbind=0.0.0.0", \
+  "-rpcallowip=0.0.0.0/0", \
+  "-rpcuser=admin", \
+  "-rpcpassword=0000" \
+]
